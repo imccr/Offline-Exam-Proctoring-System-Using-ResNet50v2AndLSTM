@@ -1,0 +1,81 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+
+# =========================
+# Virtual Environments
+# =========================
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================
+# Jupyter / Colab
+# =========================
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# =========================
+# OS junk
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+*.swp
+
+# =========================
+# Logs & temp files
+# =========================
+logs/
+*.log
+tmp/
+temp/
+cache/
+
+# =========================
+# Uploaded videos (VERY IMPORTANT)
+# =========================
+uploads/
+processed_videos/
+outputs/
+
+
+# Ignore all contents of models_data
+models_data/*
+
+# But keep the placeholder so folder exists
+!models_data/.gitkeep
+
+# =========================
+# Training leftovers
+# =========================
+*.npy
+*.npz
+*.pkl
+*.joblib
+
+# =========================
+# Kaggle / Colab
+# =========================
+kaggle.json
+.colab/
+
+# =========================
+# Environment & secrets
+# =========================
+.env
+.env.*

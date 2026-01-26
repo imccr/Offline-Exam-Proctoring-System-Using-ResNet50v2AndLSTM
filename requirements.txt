@@ -1,0 +1,10 @@
+tensorflow
+numpy==1.26.4
+opencv-python
+Pillow
+
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
