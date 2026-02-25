@@ -1,11 +1,14 @@
-tensorflow>=2.13.0
-numpy==1.26.4
-opencv-python
-Pillow
-scikit-learn
-fastapi>=0.100.0
-uvicorn>=0.20.0
+fastapi
+uvicorn
 python-multipart
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-tqdm
+opencv-python
+numpy
+ultralytics
+tensorflow
+torch
+torchvision
+
+
+
+
+pip install fastapi --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install uvicorn --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install python-multipart --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install opencv-python --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install numpy --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install ultralytics --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install tensorflow --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 --timeout 300
