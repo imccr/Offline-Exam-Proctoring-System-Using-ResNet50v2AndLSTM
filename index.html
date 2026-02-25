@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OEPS — Offline Exam Proctoring System</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: { dark:'#0d1117', panel:'#161b22', border:'#30363d', accent:'#58a6ff', muted:'#8b949e' },
+        fontFamily: { mono:['Share Tech Mono','monospace'], ui:['Rajdhani','sans-serif'] }
+      }
+    }
+  }
+</script>
+<style>
+  body{font-family:'Rajdhani',sans-serif}
+  .fm{font-family:'Share Tech Mono',monospace}
+  @keyframes pd{0%,100%{opacity:1}50%{opacity:0.3}}
+  .pd{animation:pd 1.5s infinite}
+  @keyframes fi{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  .fi{animation:fi 0.3s ease}
+  .uzone:hover,.uzone.dv{border-color:#58a6ff;box-shadow:0 0 24px rgba(88,166,255,0.12)}
+  #rp::-webkit-scrollbar,#al::-webkit-scrollbar{width:3px}
+  #rp::-webkit-scrollbar-thumb,#al::-webkit-scrollbar-thumb{background:#30363d;border-radius:2px}
+  body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none;z-index:9999}
+</style>
+</head>
+<body class="bg-dark text-gray-200 min-h-screen overflow-x-hidden">
+
+<!-- Header -->
+<header class="bg-panel border-b border-border px-7 py-4 flex items-center gap-4">
+  <div class="w-2.5 h-2.5 rounded-full bg-accent pd" style="box-shadow:0 0 8px #58a6ff"></div>
+  <span class="fm text-accent text-xs tracking-widest">&#9679; OEPS v2.0 &mdash; ResNet Monitor</span>
+  <span class="fm text-muted text-xs ml-auto" id="hs">IDLE</span>
+</header>
+
+<!-- Upload Section -->
+<div id="us" class="flex flex-col items-center justify-center min-h-[calc(100vh-57px)] px-5 py-10">
+  <h1 class="text-3xl font-bold text-center tracking-wide leading-snug max-w-2xl mb-2">
+    Offline Exam Proctoring System Using<br>
+    <span class="text-accent">Pose Estimation</span> with Fine-Tuned ResNet50V2
+  </h1>
+  <p class="fm text-muted text-xs tracking-widest uppercase text-center mb-12">
+    Institute of Engineering &nbsp;|&nbsp; Thapathali Campus &nbsp;|&nbsp; BCT 2079
+  </p>
+  <div id="uz" class="uzone w-full max-w-lg bg-panel border-2 border-dashed border-border rounded-xl px-8 py-14 text-center cursor-pointer transition-all duration-300">
+    <div class="text-5xl mb-4 opacity-60">&#127909;</div>
+    <div class="text-lg font-semibold mb-2">Drop exam video here</div>
+    <div class="fm text-muted text-xs tracking-wide">MP4 &nbsp;·&nbsp; AVI &nbsp;·&nbsp; MOV &nbsp;·&nbsp; MKV</div>
+    <input type="file" id="fi" accept="video/*" class="hidden">
+  </div>
+  <div id="sf" class="hidden mt-4 fm text-green-400 text-xs"></div>
+  <button id="ub" class="hidden mt-7 px-9 py-3 bg-accent text-dark font-bold text-sm tracking-wider rounded-lg hover:bg-blue-300 transition-all duration-200">START PROCTORING</button>
+  <div id="ps" class="hidden text-center mt-8 w-full max-w-lg">
+    <div class="fm text-muted text-xs mb-3" id="pt">Uploading video...</div>
+    <div class="h-1 bg-border rounded-full overflow-hidden">
+      <div id="pf" class="h-full bg-accent rounded-full transition-all duration-300" style="width:0%;box-shadow:0 0 8px #58a6ff"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Monitor Section -->
+<div id="ms" class="hidden flex-col gap-4 p-5">
+  <div class="flex items-center gap-3 pb-3 border-b border-border">
+    <div class="w-2 h-2 rounded-full bg-red-500 pd" id="rd" style="box-shadow:0 0 6px #ef4444"></div>
+    <span class="fm text-accent text-xs tracking-widest">LIVE PROCTORING FEED</span>
+    <span class="fm text-muted text-xs ml-auto" id="fb">FPS: --</span>
+  </div>
+
+  <div class="flex gap-4 items-start">
+    <!-- Video -->
+    <div class="flex-1 bg-black rounded-lg border border-border overflow-hidden relative min-h-64">
+      <div class="absolute top-2 left-2 fm text-accent text-xs bg-black/70 px-2 py-1 rounded border border-border z-10" id="fl">FRAME 0 / 0</div>
+      <img id="vf" src="" alt="Processing..." class="w-full block rounded-lg">
+    </div>
+
+    <!-- Side panels -->
+    <div class="w-56 flex flex-col gap-3 shrink-0">
+      <!-- Live stats -->
+      <div class="bg-panel border border-border rounded-lg p-3">
+        <div class="fm text-accent text-xs tracking-widest mb-3">LIVE STATS</div>
+        <div class="flex justify-between py-1 text-sm"><span class="text-muted">Students</span><span class="text-accent font-semibold" id="ss">0</span></div>
+        <div class="flex justify-between py-1 text-sm">
+          <span class="text-muted flex items-center gap-1.5"><span class="inline-block w-1.5 h-1.5 rounded-full bg-green-500"></span>Normal</span>
+          <span class="text-green-400 font-semibold" id="sn">0</span>
+        </div>
+        <div class="flex justify-between py-1 text-sm">
+          <span class="text-muted flex items-center gap-1.5"><span class="inline-block w-1.5 h-1.5 rounded-full bg-red-500"></span>Suspicious</span>
+          <span class="text-red-400 font-semibold" id="sx">0</span>
+        </div>
+        <div class="flex justify-between py-1 text-sm"><span class="text-muted">Elapsed</span><span class="font-semibold" id="se">00:00</span></div>
+        <div class="bg-gray-800 rounded h-1.5 mt-2">
+          <div id="sp" class="bg-accent h-1.5 rounded transition-all duration-500" style="width:0%"></div>
+        </div>
+        <button onclick="stopProctoring()" class="mt-3 w-full py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200">&#9632; STOP</button>
+      </div>
+
+      <!-- ResNet probs -->
+      <div class="bg-panel border border-border rounded-lg p-3">
+        <div class="fm text-accent text-xs tracking-widest mb-3">RESNET PROBS</div>
+        <div id="rp" class="max-h-40 overflow-y-auto"><span class="fm text-muted text-xs">Waiting...</span></div>
+      </div>
+
+      <!-- Performance -->
+      <div class="bg-panel border border-border rounded-lg p-3">
+        <div class="fm text-accent text-xs tracking-widest mb-3">PERFORMANCE</div>
+        <div class="flex justify-between py-1 text-sm"><span class="text-muted">Inference FPS</span><span class="text-accent font-semibold" id="pf2">--</span></div>
+        <div class="flex justify-between py-1 text-sm"><span class="text-muted">Frame</span><span class="font-semibold" id="pfr">--</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity log -->
+  <div class="bg-panel border border-border rounded-lg p-3">
+    <div class="fm text-accent text-xs tracking-widest mb-3">SUSPICIOUS ACTIVITY LOG</div>
+    <div id="al" class="max-h-32 overflow-y-auto"><span class="fm text-muted text-xs">No suspicious activity detected.</span></div>
+  </div>
+
+  <div id="db" class="hidden bg-green-900/20 border border-green-500 rounded-lg p-3 text-center fm text-green-400 text-sm">
+    &#10003; Processing complete. All frames analysed.
+  </div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const $=id=>document.getElementById(id);
+let selectedFile=null;
+
+$('uz').addEventListener('click',()=>$('fi').click());
+$('uz').addEventListener('dragover',e=>{e.preventDefault();$('uz').classList.add('dv')});
+$('uz').addEventListener('dragleave',()=>$('uz').classList.remove('dv'));
+$('uz').addEventListener('drop',e=>{e.preventDefault();$('uz').classList.remove('dv');if(e.dataTransfer.files[0])setFile(e.dataTransfer.files[0])});
+$('fi').addEventListener('change',()=>{if($('fi').files[0])setFile($('fi').files[0])});
+
+function setFile(f){
+  selectedFile=f;
+  $('sf').textContent='▶ '+f.name+' ('+(f.size/1024/1024).toFixed(1)+' MB)';
+  $('sf').classList.remove('hidden');
+  $('ub').classList.remove('hidden');
+}
+
+$('ub').addEventListener('click',startProctoring);
+
+async function startProctoring(){
+  if(!selectedFile)return;
+  $('ub').classList.add('hidden');
+  $('ps').classList.remove('hidden');
+  $('hs').textContent='UPLOADING...';
+  const fd=new FormData();
+  fd.append('file',selectedFile);
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST',API+'/upload');
+  xhr.upload.onprogress=e=>{
+    if(e.lengthComputable){
+      const p=(e.loaded/e.total*100).toFixed(0);
+      $('pf').style.width=p+'%';
+      $('pt').textContent='Uploading... '+p+'%';
+    }
+  };
+  xhr.onload=()=>{
+    if(xhr.status===200){
+      const{job_id}=JSON.parse(xhr.responseText);
+      $('pt').textContent='Processing started...';
+      $('hs').textContent='PROCESSING';
+      $('us').style.display='none';
+      $('ms').style.display='flex';
+      startStream(job_id);
+    }else{alert('Upload failed: '+xhr.statusText)}
+  };
+  xhr.send(fd);
+}
+
+function stopProctoring(){
+  if(window._es)window._es.close();
+  $('ms').style.display='none';
+  $('us').style.display='flex';
+  $('hs').textContent='IDLE';
+  $('sf').classList.add('hidden');
+  $('ub').classList.add('hidden');
+  $('ps').classList.add('hidden');
+  $('pf').style.width='0%';
+  $('db').classList.add('hidden');
+  $('al').innerHTML='<span class="fm text-muted text-xs">No suspicious activity detected.</span>';
+  $('rp').innerHTML='<span class="fm text-muted text-xs">Waiting...</span>';
+  $('rd').style.background='#ef4444';
+}
+
+function startStream(jobId){
+  const es=new EventSource(`${API}/stream/${jobId}`);
+  window._es=es;
+  let fc=0,t0=Date.now();
+  es.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.done){
+      es.close();
+      $('db').classList.remove('hidden');
+      $('hs').textContent='COMPLETE';
+      $('rd').style.background='#22c55e';
+      return;
+    }
+    $('vf').src='data:image/jpeg;base64,'+d.b64;
+    $('fl').textContent=`FRAME ${d.frame_num} / ${d.total_frames}`;
+    $('ss').textContent=d.n_students;
+    $('sn').textContent=d.n_students-d.n_suspicious;
+    $('sx').textContent=d.n_suspicious;
+    const m=Math.floor(d.elapsed/60).toString().padStart(2,'0');
+    const s=Math.floor(d.elapsed%60).toString().padStart(2,'0');
+    $('se').textContent=`${m}:${s}`;
+    const pct=d.total_frames>0?(d.frame_num/d.total_frames*100):0;
+    $('sp').style.width=pct.toFixed(1)+'%';
+    fc++;
+    $('fb').textContent=`FPS: ${(fc/((Date.now()-t0)/1000)).toFixed(1)}`;
+    $('pf2').textContent=d.inf_fps.toFixed(1);
+    $('pfr').textContent=`${d.frame_num}/${d.total_frames}`;
+
+    if(d.annotations&&d.annotations.length>0){
+      $('rp').innerHTML=d.annotations.map(a=>{
+        const c=a.label==='Suspicious'?'#ef4444':'#22c55e';
+        const t=a.prob<0?`${a.label} | skip`:`${a.label} | p=${a.prob.toFixed(5)}`;
+        return `<div class="flex justify-between py-0.5 border-b border-border fm text-xs">
+          <span class="text-muted">ID:${String(a.track_id).padStart(2,'0')}</span>
+          <span style="color:${c}">${t}</span></div>`;
+      }).join('');
+    }
+
+    if(d.activity_log&&d.activity_log.length>0){
+      const logEl=$('al');
+      const existing=new Set(Array.from(logEl.querySelectorAll('.lt')).map(el=>el.textContent));
+      d.activity_log.forEach(entry=>{
+        const txt=`${entry.time} | ID:${String(entry.track_id).padStart(2,'0')} | Suspicious | p=${entry.resnet_prob.toFixed(5)}`;
+        if(!existing.has(txt)){
+          if(logEl.querySelector('.empty-log'))logEl.innerHTML='';
+          const div=document.createElement('div');
+          div.className='fi flex items-center gap-2 py-1 border-b border-border';
+          div.innerHTML=`<div class="w-2 h-2 rounded-full bg-red-500 shrink-0"></div><span class="lt fm text-muted text-xs">${txt}</span>`;
+          logEl.insertBefore(div,logEl.firstChild);
+          existing.add(txt);
+        }
+      });
+    }
+  };
+  es.onerror=()=>console.warn('SSE error');
+}
+</script>
+</body>
+</html>

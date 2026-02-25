@@ -1,14 +1,10 @@
 fastapi
 uvicorn
 python-multipart
-opencv-python
-numpy
-ultralytics
-tensorflow
+opencv-python==4.13.0.92
+numpy==2.0.2
+ultralytics==8.4.16
+tensorflow==2.19.0
+keras==3.10.0
 torch
 torchvision
-
-
-
-
-pip install fastapi --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install uvicorn --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install python-multipart --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install opencv-python --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install numpy --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install ultralytics --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install tensorflow --timeout 300 -i https://pypi.tuna.tsinghua.edu.cn/simple && pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121 --timeout 300
