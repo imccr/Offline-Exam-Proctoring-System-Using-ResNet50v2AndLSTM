@@ -1,7 +1,8 @@
 # Model
 resnet50v2_final/
-resnet50v2_final.h5/
-yolo11s-pose.pt/
+resnet50v2_final.h5
+yolo11s-pose.pt
+
 # Virtual environment
 venv/
 
