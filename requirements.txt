@@ -2,7 +2,7 @@ fastapi
 uvicorn
 python-multipart
 opencv-python==4.13.0.92
-numpy==2.0.2
+numpy==1.26.4
 ultralytics==8.4.16
 tensorflow==2.19.0
 keras==3.10.0

@@ -16,13 +16,19 @@ Open CMD in the project folder:
 ## 4. Install dependencies
 pip install -r requirements.txt
 
-## 5. Download model
+## 5. Install TailwindCSS
+https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe
+
+## 6. Download model
 - Download resnet50v2_final.keras from Google Drive
 - Place it in the project folder
 - Update RESNET_MODEL_PATH in main.py
 
-## 6. Run
+## 6. Run Backend
   python main.py
 
-## 7. Open browser
+## 7. Run CSS
+./tailwindcss -i input.css -o output.css --watch
+
+## 8. Open browser
   http://localhost:8000

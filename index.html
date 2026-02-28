@@ -4,18 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OEPS - Offline Exam Proctoring System</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<link href="/static/output.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: { dark:'#0d1117', panel:'#161b22', border:'#30363d', accent:'#58a6ff', muted:'#8b949e' },
-        fontFamily: { mono:['Share Tech Mono','monospace'], ui:['Rajdhani','sans-serif'] }
-      }
-    }
-  }
-</script>
 <style>
   body { font-family: 'Rajdhani', sans-serif; }
   .fm { font-family: 'Share Tech Mono', monospace; }
@@ -37,7 +27,6 @@
 <header class="bg-panel border-b border-border px-7 py-4 flex items-center gap-4">
   <div class="w-2.5 h-2.5 rounded-full bg-accent pd" style="box-shadow:0 0 8px #58a6ff"></div>
   <span class="fm text-accent text-xs tracking-widest">&#9679; OEPS v2.0 &mdash; ResNet Monitor</span>
-  <!-- FIX #3: show backend display_fps instead of client-calculated SSE rate -->
   <span class="fm text-muted text-xs ml-auto" id="hs">IDLE</span>
 </header>
 
@@ -51,22 +40,35 @@
     Institute of Engineering &nbsp;|&nbsp; Thapathali Campus &nbsp;|&nbsp; BCT 2079
   </p>
 
-  <div id="uz" class="uzone w-full max-w-lg bg-panel border-2 border-dashed border-border rounded-xl px-8 py-14 text-center cursor-pointer transition-all duration-300">
-    <div class="text-5xl mb-4 opacity-60">&#127909;</div>
-    <div class="text-lg font-semibold mb-2">Drop exam video here</div>
-    <div class="fm text-muted text-xs tracking-wide">MP4 &nbsp;·&nbsp; AVI &nbsp;·&nbsp; MOV &nbsp;·&nbsp; MKV</div>
-    <input type="file" id="fi" accept="video/*" class="hidden">
+  <!-- Two input options -->
+  <div class="flex gap-6 w-full max-w-2xl">
+
+    <!-- Upload Video -->
+    <div class="flex-1">
+      <div id="uz" class="uzone w-full bg-panel border-2 border-dashed border-border rounded-xl text-center cursor-pointer transition-all duration-300" style="padding: 80px 24px;">
+        <div class="text-5xl mb-4 opacity-60">&#127909;</div>
+        <div class="text-lg font-semibold mb-2">Drop exam video here</div>
+        <div class="fm text-muted text-xs tracking-wide">MP4 &nbsp;·&nbsp; AVI &nbsp;·&nbsp; MOV &nbsp;·&nbsp; MKV</div>
+        <input type="file" id="fi" accept="video/*" class="hidden">
+      </div>
+      <div id="sf" class="hidden mt-3 fm text-green-400 text-xs text-center"></div>
+    </div>
+
+    <!-- Webcam -->
+    <div class="flex-1">
+      <div class="uzone w-full bg-panel border-2 border-dashed border-border rounded-xl text-center cursor-pointer transition-all duration-300 flex flex-col items-center justify-center" style="padding: 80px 24px;" onclick="startWebcam()">
+        <div class="text-5xl mb-4 opacity-60">&#128247;</div>
+        <div class="text-lg font-semibold mb-2">Start Webcam</div>
+        <div class="fm text-muted text-xs tracking-wide">Live camera feed</div>
+      </div>
+    </div>
+
   </div>
 
-  <div id="sf" class="hidden mt-4 fm text-green-400 text-xs"></div>
-  <button id="ub" class="hidden mt-7 px-9 py-3 bg-accent text-dark font-bold text-sm tracking-wider rounded-lg hover:bg-blue-300 transition-all duration-200">
-    START PROCTORING
-  </button>
-
-  <div id="ps" class="hidden text-center mt-8 w-full max-w-lg">
+  <!-- Upload progress -->
+  <div id="ps" class="hidden text-center mt-8 w-full max-w-2xl">
     <div class="fm text-muted text-xs mb-3" id="pt">Uploading video...</div>
     <div class="h-1 bg-border rounded-full overflow-hidden">
-      <!-- FIX #1: renamed id from "pf" to "uprog" to avoid conflict with pf2 -->
       <div id="uprog" class="h-full bg-accent rounded-full transition-all duration-300" style="width:0%;box-shadow:0 0 8px #58a6ff"></div>
     </div>
   </div>
@@ -78,9 +80,8 @@
   <!-- Top bar -->
   <div class="flex items-center gap-3 pb-3 border-b border-border">
     <div class="w-2 h-2 rounded-full bg-red-500 pd" id="rd" style="box-shadow:0 0 6px #ef4444"></div>
-    <span class="fm text-accent text-xs tracking-widest">LIVE PROCTORING FEED</span>
-    <!-- FIX #3: label clearly as Display FPS from backend, not SSE rate -->
-    <span class="fm text-muted text-xs ml-auto" id="fb">Display FPS: --</span>
+    <span class="fm text-accent text-xs tracking-widest" id="feed-label">LIVE PROCTORING FEED</span>
+
   </div>
 
   <div class="flex gap-4 items-start">
@@ -119,13 +120,28 @@
           <span class="text-muted">Elapsed</span>
           <span class="font-semibold" id="se">00:00</span>
         </div>
-        <!-- Progress bar -->
-        <div class="bg-gray-800 rounded h-1.5 mt-2">
+
+        <!-- Progress bar — hidden for webcam -->
+        <div id="progress-wrap" class="bg-gray-800 rounded h-1.5 mt-2">
           <div id="vp" class="bg-accent h-1.5 rounded transition-all duration-500" style="width:0%"></div>
         </div>
-        <button onclick="stopProctoring()"
+
+        <!-- Pause/Play — only for file video -->
+        <button id="pauseBtn" onclick="togglePause()"
+          class="hidden mt-3 w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200">
+          &#9646;&#9646; PAUSE
+        </button>
+
+        <!-- Stop button -->
+        <button id="stopBtn" onclick="stopProctoring()"
           class="mt-3 w-full py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200">
           &#9632; STOP
+        </button>
+
+        <!-- Load New Video — shown after video completes -->
+        <button id="newVideoBtn" onclick="resetToUpload()"
+          class="hidden mt-3 w-full py-2 bg-accent hover:bg-blue-300 text-dark text-xs font-bold tracking-widest rounded transition-colors duration-200">
+          &#8635; LOAD NEW VIDEO
         </button>
       </div>
 
@@ -138,7 +154,6 @@
       </div>
 
       <!-- Performance -->
-      <!-- FIX #2: added Display FPS row, both fps values now visible -->
       <div class="bg-panel border border-border rounded-lg p-3">
         <div class="fm text-accent text-xs tracking-widest mb-3">PERFORMANCE</div>
         <div class="flex justify-between py-1 text-sm">
@@ -161,7 +176,6 @@
   <!-- Suspicious Activity Log -->
   <div class="bg-panel border border-border rounded-lg p-3">
     <div class="fm text-accent text-xs tracking-widest mb-3">SUSPICIOUS ACTIVITY LOG</div>
-    <!-- FIX #4: added class "empty-log" so JS can detect and clear it -->
     <div id="al" class="max-h-32 overflow-y-auto">
       <span class="fm text-muted text-xs empty-log">No suspicious activity detected.</span>
     </div>
@@ -179,9 +193,12 @@ const API = 'http://localhost:8000';
 const $   = id => document.getElementById(id);
 
 let selectedFile = null;
+let currentJobId = null;
+let currentMode  = null;
 let es           = null;
+let isPaused     = false;
 
-// ── File Selection ────────────────────────────────────────────────────────────
+// ── File Selection — auto start on select ─────────────────────────────────────
 $('uz').addEventListener('click', () => $('fi').click());
 
 ['dragover', 'dragleave', 'drop'].forEach(evt =>
@@ -200,15 +217,13 @@ function setFile(f) {
   selectedFile = f;
   $('sf').textContent = `▶ ${f.name} (${(f.size / 1024 / 1024).toFixed(1)} MB)`;
   $('sf').classList.remove('hidden');
-  $('ub').classList.remove('hidden');
+  startVideoProctoring();
 }
 
-// ── Start Proctoring ──────────────────────────────────────────────────────────
-$('ub').addEventListener('click', startProctoring);
-
-function startProctoring() {
+// ── Start Video Proctoring ────────────────────────────────────────────────────
+function startVideoProctoring() {
   if (!selectedFile) return;
-  $('ub').classList.add('hidden');
+  currentMode = 'video';
   $('ps').classList.remove('hidden');
   $('hs').textContent = 'UPLOADING...';
 
@@ -221,7 +236,6 @@ function startProctoring() {
   xhr.upload.onprogress = e => {
     if (e.lengthComputable) {
       const p = (e.loaded / e.total * 100).toFixed(0);
-      // FIX #1: use correct id "uprog" for upload progress bar
       $('uprog').style.width = p + '%';
       $('pt').textContent    = 'Uploading... ' + p + '%';
     }
@@ -230,10 +244,17 @@ function startProctoring() {
   xhr.onload = () => {
     if (xhr.status === 200) {
       const { job_id } = JSON.parse(xhr.responseText);
+      currentJobId               = job_id;
       $('pt').textContent        = 'Processing started...';
       $('hs').textContent        = 'PROCESSING';
       $('us').style.display      = 'none';
       $('ms').style.display      = 'flex';
+      $('feed-label').textContent = 'LIVE PROCTORING FEED';
+      $('pauseBtn').classList.remove('hidden');
+      $('stopBtn').classList.remove('hidden');
+      $('newVideoBtn').classList.add('hidden');
+      $('progress-wrap').classList.remove('hidden');
+      isPaused = false;
       startStream(job_id);
     } else {
       alert('Upload failed: ' + xhr.statusText);
@@ -243,8 +264,48 @@ function startProctoring() {
   xhr.send(fd);
 }
 
+// ── Start Webcam ──────────────────────────────────────────────────────────────
+async function startWebcam() {
+  currentMode = 'webcam';
+  $('hs').textContent        = 'STARTING WEBCAM...';
+  $('us').style.display      = 'none';
+  $('ms').style.display      = 'flex';
+  $('feed-label').textContent = 'WEBCAM LIVE FEED';
+  $('pauseBtn').classList.add('hidden');
+  $('newVideoBtn').classList.add('hidden');
+  $('stopBtn').classList.remove('hidden');
+  $('progress-wrap').classList.add('hidden');
+
+  const res        = await fetch(`${API}/start_webcam`, { method: 'POST' });
+  const { job_id } = await res.json();
+  currentJobId     = job_id;
+  $('hs').textContent = 'WEBCAM LIVE';
+  startStream(job_id);
+}
+
+// ── Pause / Play ──────────────────────────────────────────────────────────────
+async function togglePause() {
+  if (!currentJobId) return;
+  const res  = await fetch(`${API}/pause/${currentJobId}`, { method: 'POST' });
+  const data = await res.json();
+  isPaused   = data.paused;
+  $('pauseBtn').innerHTML  = isPaused ? '&#9654; PLAY' : '&#9646;&#9646; PAUSE';
+  $('pauseBtn').className  = isPaused
+    ? 'mt-3 w-full py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200'
+    : 'mt-3 w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200';
+}
+
 // ── Stop Proctoring ───────────────────────────────────────────────────────────
-function stopProctoring() {
+async function stopProctoring() {
+  if (currentJobId) {
+    await fetch(`${API}/stop/${currentJobId}`, { method: 'POST' }).catch(() => {});
+  }
+  if (es) { es.close(); es = null; }
+  resetToUpload();
+}
+
+// ── Reset to Upload Page ──────────────────────────────────────────────────────
+function resetToUpload() {
   if (es) { es.close(); es = null; }
 
   $('ms').style.display = 'none';
@@ -252,50 +313,70 @@ function stopProctoring() {
   $('hs').textContent   = 'IDLE';
 
   $('sf').classList.add('hidden');
-  $('ub').classList.add('hidden');
   $('ps').classList.add('hidden');
-  // FIX #1: reset correct upload progress bar id
-  $('uprog').style.width = '0%';
+  $('uprog').style.width    = '0%';
   $('db').classList.add('hidden');
-  $('rd').style.background = '#ef4444';
+  $('rd').style.background  = '#ef4444';
+  $('pauseBtn').innerHTML   = '&#9646;&#9646; PAUSE';
+  $('pauseBtn').className   = 'hidden mt-3 w-full py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-bold tracking-widest rounded transition-colors duration-200';
+  $('stopBtn').classList.remove('hidden');
+  $('newVideoBtn').classList.add('hidden');
+  $('progress-wrap').classList.remove('hidden');
 
-  // Reset panels
-  $('al').innerHTML  = '<span class="fm text-muted text-xs empty-log">No suspicious activity detected.</span>';
-  $('rp').innerHTML  = '<span class="fm text-muted text-xs">Waiting...</span>';
-  $('ss').textContent = '0';
-  $('sn').textContent = '0';
-  $('sx').textContent = '0';
-  $('se').textContent = '00:00';
-  $('vp').style.width = '0%';
-  $('fb').textContent      = 'Display FPS: --';
+  $('al').innerHTML         = '<span class="fm text-muted text-xs empty-log">No suspicious activity detected.</span>';
+  $('rp').innerHTML         = '<span class="fm text-muted text-xs">Waiting...</span>';
+  $('ss').textContent       = '0';
+  $('sn').textContent       = '0';
+  $('sx').textContent       = '0';
+  $('se').textContent       = '00:00';
+  $('vp').style.width       = '0%';
+
   $('disp-fps').textContent = '--';
   $('inf-fps').textContent  = '--';
   $('pfr').textContent      = '--';
   $('fl').textContent       = 'FRAME 0 / 0';
+
+  $('fi').value  = '';
+  selectedFile   = null;
+  currentJobId   = null;
+  currentMode    = null;
+  isPaused       = false;
 }
 
-// ── Stream Handler ────────────────────────────────────────────────────────────
+// Start Streaming
 function startStream(jobId) {
   es = new EventSource(`${API}/stream/${jobId}`);
+
+  let dispFrames = 0;
+  let dispT0     = Date.now();
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);
 
-    // Video finished
     if (d.done) {
       es.close();
       es = null;
       $('db').classList.remove('hidden');
       $('hs').textContent      = 'COMPLETE';
       $('rd').style.background = '#22c55e';
+      $('stopBtn').classList.add('hidden');
+      $('pauseBtn').classList.add('hidden');
+      $('newVideoBtn').classList.remove('hidden');
       return;
     }
 
-    // ── Video frame ───────────────────────────────────────────────────────
-    $('vf').src         = 'data:image/jpeg;base64,' + d.b64;
-    $('fl').textContent = `FRAME ${d.frame_num} / ${d.total_frames}`;
+    // Browser-side display FPS
+    dispFrames++;
+    const dispElapsed = (Date.now() - dispT0) / 1000;
+    if (dispElapsed >= 1.0) {
+      $('disp-fps').textContent = (dispFrames / dispElapsed).toFixed(1);
+      dispFrames = 0;
+      dispT0     = Date.now();
+    }
 
-    // ── Live stats ────────────────────────────────────────────────────────
+    $('vf').src         = 'data:image/jpeg;base64,' + d.b64;
+    $('fl').textContent = d.is_webcam ? 'WEBCAM LIVE' : `FRAME ${d.frame_num} / ${d.total_frames}`;
+
     $('ss').textContent = d.n_students;
     $('sn').textContent = d.n_students - d.n_suspicious;
     $('sx').textContent = d.n_suspicious;
@@ -304,17 +385,14 @@ function startStream(jobId) {
     const s = String(Math.floor(d.elapsed % 60)).padStart(2, '0');
     $('se').textContent = `${m}:${s}`;
 
-    const pct = d.total_frames > 0 ? (d.frame_num / d.total_frames * 100).toFixed(1) : 0;
-    $('vp').style.width = pct + '%';
+    if (!d.is_webcam) {
+      const pct = d.total_frames > 0 ? (d.frame_num / d.total_frames * 100).toFixed(1) : 0;
+      $('vp').style.width = pct + '%';
+    }
 
-    // ── Performance panel ─────────────────────────────────────────────────
-    // FIX #2 + #3: use backend-provided display_fps and inf_fps directly
-    $('fb').textContent       = `Display FPS: ${d.display_fps.toFixed(1)}`;
-    $('disp-fps').textContent = d.display_fps.toFixed(1);
-    $('inf-fps').textContent  = d.inf_fps.toFixed(1);
-    $('pfr').textContent      = `${d.frame_num} / ${d.total_frames}`;
+    $('inf-fps').textContent = d.inf_fps.toFixed(1);
+    $('pfr').textContent     = d.is_webcam ? 'LIVE' : `${d.frame_num} / ${d.total_frames}`;
 
-    // ── ResNet probability panel ──────────────────────────────────────────
     if (d.annotations?.length) {
       $('rp').innerHTML = d.annotations.map(a => {
         const color = a.label === 'Suspicious' ? '#ef4444' : '#22c55e';
@@ -328,14 +406,11 @@ function startStream(jobId) {
       }).join('');
     }
 
-    // ── Suspicious activity log ───────────────────────────────────────────
     if (d.activity_log?.length) {
       const logEl   = $('al');
-      // FIX #4: correctly detect and clear the empty-log placeholder
       const emptyEl = logEl.querySelector('.empty-log');
       if (emptyEl) logEl.innerHTML = '';
 
-      // Build set of already-rendered entries to avoid duplicates
       const existing = new Set(
         Array.from(logEl.querySelectorAll('.lt')).map(el => el.textContent)
       );
@@ -343,10 +418,10 @@ function startStream(jobId) {
       d.activity_log.forEach(entry => {
         const txt = `${entry.time} | ID:${String(entry.track_id).padStart(2, '0')} | Suspicious | p=${entry.resnet_prob.toFixed(5)}`;
         if (!existing.has(txt)) {
-          const div       = document.createElement('div');
-          div.className   = 'fi flex items-center gap-2 py-1 border-b border-border';
-          div.innerHTML   = `<div class="w-2 h-2 rounded-full bg-red-500 shrink-0"></div>
-                             <span class="lt fm text-muted text-xs">${txt}</span>`;
+          const div     = document.createElement('div');
+          div.className = 'fi flex items-center gap-2 py-1 border-b border-border';
+          div.innerHTML = `<div class="w-2 h-2 rounded-full bg-red-500 shrink-0"></div>
+                           <span class="lt fm text-muted text-xs">${txt}</span>`;
           logEl.insertBefore(div, logEl.firstChild);
           existing.add(txt);
         }

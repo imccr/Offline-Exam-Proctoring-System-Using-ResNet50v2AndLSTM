@@ -12,6 +12,7 @@ import functools
 from ultralytics import YOLO
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
@@ -58,10 +59,8 @@ class Config:
         (6,8),(8,10),
         (5,11),(6,12),(11,12)
     ]
-    # ── Thread FPS Targets ────────────────────────────────────────────────────
-    DISPLAY_FPS            = 30       # Thread 1 target
-    INFERENCE_FPS          = 10       # Thread 2 target
-    # ── Output Buffer ─────────────────────────────────────────────────────────
+    DISPLAY_FPS            = 30
+    INFERENCE_FPS          = 10
     FRAME_BUFFER_SIZE      = 60
     JPEG_QUALITY           = 80
 
@@ -217,13 +216,9 @@ class SimpleIoUTracker:
 
 # ── AI Pipeline ───────────────────────────────────────────────────────────────
 class AIPipeline:
-    """
-    Handles YOLO → IOU Tracker → Skeleton ROI → ResNet50V2 → Decision Module.
-    One instance per job to keep tracker state isolated.
-    """
     def __init__(self, yolo_model, resnet_infer_fn, skeleton_gen):
         self.yolo         = yolo_model
-        self.resnet_infer = resnet_infer_fn      # compiled tf.function
+        self.resnet_infer = resnet_infer_fn
         self.skeleton_gen = skeleton_gen
         self.tracker      = SimpleIoUTracker(
             iou_threshold=config.IOU_THRESHOLD,
@@ -231,7 +226,6 @@ class AIPipeline:
         )
 
     def process_frame(self, frame):
-        # ── Step 1: YOLO Person Detection + Pose Estimation ───────────────
         rgb_frame  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results    = self.yolo(rgb_frame, conf=config.POSE_CONF_THRESHOLD, verbose=False)
         detections = []
@@ -242,12 +236,10 @@ class AIPipeline:
             for b, c, k in zip(boxes, confs, kpts):
                 detections.append((b, c, k))
 
-        # ── Step 2: IOU Tracker — Student ID Assignment ───────────────────
         matched_tracks = self.tracker.update(detections)
         if not matched_tracks:
             return []
 
-        # ── Step 3: Skeleton ROI Extraction ──────────────────────────────
         skeleton_batch = []
         track_info     = []
         skipped_tracks = []
@@ -261,19 +253,15 @@ class AIPipeline:
 
         detections_info = []
 
-        # ── Step 4: ResNet50V2 Behavioral Classification (batched) ────────
         if skeleton_batch:
-            preprocessed  = self.skeleton_gen.preprocess_batch(skeleton_batch)
-            batch_tensor  = tf.constant(preprocessed, dtype=tf.float32)
-            # Single batched GPU call via compiled tf.function (FIX #10)
-            predictions   = self.resnet_infer(batch_tensor).numpy().flatten()
+            preprocessed = self.skeleton_gen.preprocess_batch(skeleton_batch)
+            batch_tensor = tf.constant(preprocessed, dtype=tf.float32)
+            predictions  = self.resnet_infer(batch_tensor).numpy().flatten()
 
             for i, (track_id, bbox) in enumerate(track_info):
                 prob          = float(predictions[i]) if i < len(predictions) else 0.0
                 is_suspicious = 1 if prob >= config.SUSPICIOUS_THRESHOLD else 0
                 self.tracker.add_vote(track_id, is_suspicious)
-
-                # ── Step 5: Decision Module ────────────────────────────────
                 label, vote_ratio = self.tracker.get_decision(track_id)
                 detections_info.append({
                     'student_id' : track_id,
@@ -283,7 +271,6 @@ class AIPipeline:
                     'vote_ratio' : vote_ratio,
                 })
 
-        # Skipped tracks (invalid skeleton) still get last known label
         for track_id, bbox in skipped_tracks:
             label, vote_ratio = self.tracker.get_decision(track_id)
             detections_info.append({
@@ -316,28 +303,15 @@ def draw_annotations(frame, detections_info):
         cv2.putText(frame, tag, (x1+pad, tag_y), cv2.FONT_HERSHEY_SIMPLEX, fs, (255,255,255), 1)
     return frame
 
-def draw_status_bar(frame, frame_num, total_frames, elapsed, inf_fps, display_fps, n_students, n_sus):
-    h, w  = frame.shape[:2]
-    bar_h = 36
-    cv2.rectangle(frame, (0, h-bar_h), (w, h), (15,15,15), -1)
-    mins, secs = divmod(int(elapsed), 60)
-    progress   = (frame_num / total_frames * 100) if total_frames > 0 else 0
-    status = (f'Frame:{frame_num}/{total_frames}  {progress:.1f}%  '
-              f'DispFPS:{display_fps:.1f}  InfFPS:{inf_fps:.1f}  '
-              f'Time:{mins:02d}:{secs:02d}  '
-              f'Students:{n_students}  Suspicious:{n_sus}')
-    cv2.putText(frame, status, (8, h-10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0,220,0), 1, cv2.LINE_AA)
-    return frame
 
-# ── Global Model Loading (once at startup) ────────────────────────────────────
+
+# ── Global Model Loading ──────────────────────────────────────────────────────
 print("Loading models...")
 device       = 'cuda' if torch.cuda.is_available() else 'cpu'
 yolo_model   = YOLO('yolo11s-pose.pt').to(device)
 resnet_model = load_model(RESNET_MODEL_PATH, compile=False)
 skeleton_gen = SkeletonGenerator()
 
-# ── FIX #10: Compile ResNet as tf.function for GPU graph optimization ─────────
 @tf.function(
     input_signature=[tf.TensorSpec(shape=[None, 224, 224, 3], dtype=tf.float32)],
     reduce_retracing=True
@@ -345,71 +319,70 @@ skeleton_gen = SkeletonGenerator()
 def resnet_infer(x):
     return resnet_model(x, training=False)
 
-# ── FIX #9: Warmup with multiple batch sizes to pre-compile TF graph ──────────
-print("Warming up ResNet (pre-compiling TF graph for all batch sizes)...")
+print("Warming up ResNet...")
 for bs in [1, 2, 4, 8]:
     dummy = tf.random.normal([bs, 224, 224, 3])
     _     = resnet_infer(dummy)
 print(f"Models ready. Device: {device}")
 
 # ── Job State ─────────────────────────────────────────────────────────────────
-# FIX #7: Per-job state dictionary to support multiple concurrent videos
 jobs: dict = {}
-# Structure per job:
-# {
-#   'frames'      : deque,        # encoded frames ready to stream
-#   'done'        : bool,         # video finished
-#   'running'     : bool,         # threads active (FIX #8)
-#   'frame_lock'  : Lock,         # protects latest_frame
-#   'result_lock' : Lock,         # protects latest_results
-#   'new_frame'   : Event,        # signals inference thread (FIX #3)
-#   'latest_frame': None|ndarray,
-#   'latest_results': None|list,
-#   'total_frames': int,
-#   'frame_num'   : int,
-#   'start_time'  : float,
-#   'activity_log': list,
-#   'inf_fps'     : float,
-#   'display_fps' : float,
-# }
 
-# ── Thread 1: Capture Loop (~30 FPS) ─────────────────────────────────────────
-def capture_loop(job_id: str, video_path: str):
-    """
-    Reads frames from video at target DISPLAY_FPS.
-    Writes to shared latest_frame.
-    Never waits for AI inference.
-    FIX #1: Sleep only the REMAINDER after cap.read() time.
-    """
-    job           = jobs[job_id]
-    cap           = cv2.VideoCapture(video_path)
-    total_frames  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    job['total_frames'] = total_frames
+def make_job(is_webcam=False):
+    return {
+        'frames'         : deque(),
+        'done'           : False,
+        'running'        : True,
+        'paused'         : False,
+        'is_webcam'      : is_webcam,
+        'frame_lock'     : threading.Lock(),
+        'result_lock'    : threading.Lock(),
+        'new_frame'      : threading.Event(),
+        'latest_frame'   : None,
+        'latest_results' : None,
+        'total_frames'   : 0,
+        'frame_num'      : 0,
+        'start_time'     : time.time(),
+        'activity_log'   : [],
+        'inf_fps'        : 0.0,
+        'display_fps'    : 0.0,
+    }
 
+# ── Thread 1: Capture Loop ────────────────────────────────────────────────────
+def capture_loop(job_id: str, source):
+    job             = jobs[job_id]
+    cap             = cv2.VideoCapture(source)
+    is_webcam       = job['is_webcam']
     target_interval = 1.0 / config.DISPLAY_FPS
     frame_num       = 0
 
+    if not is_webcam:
+        job['total_frames'] = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
     while job['running']:
-        t_read_start = time.perf_counter()
-        ret, frame   = cap.read()
+        if job['paused']:
+            time.sleep(0.05)
+            continue
+
+        t_start    = time.perf_counter()
+        ret, frame = cap.read()
 
         if not ret:
-            # Video ended
-            job['done'] = True
-            break
+            if is_webcam:
+                time.sleep(0.01)
+                continue
+            else:
+                job['done'] = True
+                break
 
         frame_num += 1
-
-        # Write latest frame to shared memory
         with job['frame_lock']:
             job['latest_frame'] = frame.copy()
             job['frame_num']    = frame_num
 
-        # Signal inference thread that a new frame is available (FIX #3)
         job['new_frame'].set()
 
-        # FIX #1: Sleep only remainder to hit target FPS
-        elapsed_read = time.perf_counter() - t_read_start
+        elapsed_read = time.perf_counter() - t_start
         sleep_time   = target_interval - elapsed_read
         if sleep_time > 0:
             time.sleep(sleep_time)
@@ -417,31 +390,25 @@ def capture_loop(job_id: str, video_path: str):
     cap.release()
     job['running'] = False
 
-# ── Thread 2: Inference Loop (~8-10 FPS) ─────────────────────────────────────
+# ── Thread 2: Inference Loop ──────────────────────────────────────────────────
 def inference_loop(job_id: str):
-    """
-    Waits for new frame signal, runs full AI pipeline, stores results.
-    FIX #2: Uses Event.wait(timeout) to avoid busy-waiting.
-    FIX #3: Processes only when new frame is signaled.
-    """
-    job              = jobs[job_id]
-    pipe             = AIPipeline(yolo_model, resnet_infer, skeleton_gen)
-    target_interval  = 1.0 / config.INFERENCE_FPS
-    inf_fps_tracker  = deque(maxlen=20)
+    job             = jobs[job_id]
+    pipe            = AIPipeline(yolo_model, resnet_infer, skeleton_gen)
+    target_interval = 1.0 / config.INFERENCE_FPS
+    inf_fps_tracker = deque(maxlen=20)
 
     while job['running'] or not job['done']:
-        # FIX #2 & #3: Wait for new frame signal with timeout
-        # This avoids busy-waiting and ensures we process fresh frames
         got_new = job['new_frame'].wait(timeout=1.0)
         if not got_new:
             if job['done']:
                 break
             continue
 
-        # Clear the event so we wait for the next new frame
         job['new_frame'].clear()
 
-        # Grab latest frame copy
+        if job['paused']:
+            continue
+
         frame_copy = None
         with job['frame_lock']:
             if job['latest_frame'] is not None:
@@ -450,17 +417,14 @@ def inference_loop(job_id: str):
         if frame_copy is None:
             continue
 
-        # Run full AI pipeline
         t0              = time.perf_counter()
         detections_info = pipe.process_frame(frame_copy)
         elapsed         = time.perf_counter() - t0
 
-        # Update inference FPS
         if elapsed > 0:
             inf_fps_tracker.append(1.0 / elapsed)
         job['inf_fps'] = float(np.mean(inf_fps_tracker)) if inf_fps_tracker else 0.0
 
-        # Update activity log for suspicious detections
         start_time = job.get('start_time', time.time())
         mins, secs = divmod(int(time.time() - start_time), 60)
         for d in detections_info:
@@ -470,35 +434,31 @@ def inference_loop(job_id: str):
                     'track_id'   : d['student_id'],
                     'resnet_prob': d['resnet_prob'],
                 })
-                # Keep log bounded to last 100 entries
                 if len(job['activity_log']) > 100:
                     job['activity_log'].pop(0)
 
-        # Write results to shared memory
         with job['result_lock']:
             job['latest_results'] = detections_info
 
-        # FIX #2: Enforce upper bound — sleep remainder to stay at INFERENCE_FPS
-        # This prevents inference from running uncapped and starving display
         sleep_time = target_interval - elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-# ── Thread 3: Display + Encode Loop (~30 FPS) ─────────────────────────────────
+# ── Thread 3: Display Loop ────────────────────────────────────────────────────
 def display_loop(job_id: str):
-    """
-    Reads latest_frame + latest_results.
-    Draws annotations without waiting for AI.
-    Encodes JPEG and pushes to output frame buffer.
-    """
+    
     job              = jobs[job_id]
-    target_interval  = 1.0 / config.DISPLAY_FPS
+    is_webcam        = job['is_webcam']
+    target_interval  = 1.0 / config.DISPLAY_FPS   # FIX: cap at 30 FPS
     disp_fps_tracker = deque(maxlen=30)
 
     while job['running'] or not job['done']:
+        if job['paused']:
+            time.sleep(0.1)
+            continue
         t_loop_start = time.perf_counter()
+        
 
-        # Read latest frame
         frame_copy = None
         with job['frame_lock']:
             if job['latest_frame'] is not None:
@@ -508,15 +468,12 @@ def display_loop(job_id: str):
             time.sleep(0.01)
             continue
 
-        # Read latest AI results (may be None if inference hasn't run yet)
         with job['result_lock']:
             results = job['latest_results']
 
-        # Draw annotations from last known AI results
         if results:
             draw_annotations(frame_copy, results)
 
-        # Gather stats
         frame_num    = job.get('frame_num', 0)
         total_frames = job.get('total_frames', 0)
         elapsed      = time.time() - job.get('start_time', time.time())
@@ -525,17 +482,12 @@ def display_loop(job_id: str):
         n_students   = len(results) if results else 0
         n_suspicious = sum(1 for d in results if d['label'] == 'Suspicious') if results else 0
 
-        # Draw status bar on frame (FIX #6)
-        draw_status_bar(frame_copy, frame_num, total_frames,
-                        elapsed, inf_fps, disp_fps,
-                        n_students, n_suspicious)
 
-        # Encode frame to JPEG
+
         _, buf = cv2.imencode('.jpg', frame_copy,
                               [cv2.IMWRITE_JPEG_QUALITY, config.JPEG_QUALITY])
         b64    = base64.b64encode(buf).decode()
 
-        # Build full payload (FIX #5: all fields frontend expects)
         payload = {
             'b64'         : b64,
             'frame_num'   : frame_num,
@@ -546,84 +498,73 @@ def display_loop(job_id: str):
             'n_students'  : n_students,
             'n_suspicious': n_suspicious,
             'activity_log': list(job['activity_log'])[-10:],
+            'is_webcam'   : is_webcam,
+            'paused'      : job['paused'],
             'annotations' : [
-                {
-                    'track_id': d['student_id'],
-                    'label'   : d['label'],
-                    'prob'    : d['resnet_prob'],
-                }
+                {'track_id': d['student_id'], 'label': d['label'], 'prob': d['resnet_prob']}
                 for d in (results or [])
             ],
         }
 
         job['frames'].append(payload)
-
-        # Keep buffer bounded (FIX #7 side effect)
         while len(job['frames']) > config.FRAME_BUFFER_SIZE:
             job['frames'].popleft()
 
-        # Update display FPS tracker
         loop_elapsed = time.perf_counter() - t_loop_start
         if loop_elapsed > 0:
             disp_fps_tracker.append(1.0 / loop_elapsed)
 
-        # Sleep remainder to target DISPLAY_FPS
+        # FIX: sleep remainder — prevents 194 FPS bug
         sleep_time = target_interval - loop_elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
 
-    # Signal stream that video is done
     job['done'] = True
 
 # ── FastAPI App ───────────────────────────────────────────────────────────────
 app = FastAPI()
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
-# ── FIX #4: /upload endpoint restored ────────────────────────────────────────
+def start_job_threads(job_id: str, source):
+    threading.Thread(target=capture_loop,   args=(job_id, source), daemon=True).start()
+    threading.Thread(target=inference_loop, args=(job_id,),        daemon=True).start()
+    threading.Thread(target=display_loop,   args=(job_id,),        daemon=True).start()
+
 @app.post("/upload")
 async def upload_video(file: UploadFile = File(...)):
     job_id    = str(uuid.uuid4())
     save_path = UPLOAD_DIR / f"{job_id}_{file.filename}"
-
     with open(save_path, "wb") as f:
         f.write(await file.read())
-
-    # FIX #7 + #8: Per-job isolated state, fresh running=True each time
-    jobs[job_id] = {
-        'frames'         : deque(),
-        'done'           : False,
-        'running'        : True,          # FIX #8: per-job flag, not global
-        'frame_lock'     : threading.Lock(),
-        'result_lock'    : threading.Lock(),
-        'new_frame'      : threading.Event(),   # FIX #3
-        'latest_frame'   : None,
-        'latest_results' : None,
-        'total_frames'   : 0,
-        'frame_num'      : 0,
-        'start_time'     : time.time(),
-        'activity_log'   : [],
-        'inf_fps'        : 0.0,
-        'display_fps'    : 0.0,
-        'path'           : str(save_path),
-    }
-
-    # Start all 3 threads per job
-    threading.Thread(
-        target=capture_loop, args=(job_id, str(save_path)), daemon=True
-    ).start()
-    threading.Thread(
-        target=inference_loop, args=(job_id,), daemon=True
-    ).start()
-    threading.Thread(
-        target=display_loop, args=(job_id,), daemon=True
-    ).start()
-
+    jobs[job_id] = make_job(is_webcam=False)
+    jobs[job_id]['path'] = str(save_path)
+    start_job_threads(job_id, str(save_path))
     return {"job_id": job_id}
 
-# ── FIX #4: Stream endpoint restored to /stream/{job_id} ─────────────────────
+@app.post("/start_webcam")
+async def start_webcam():
+    job_id       = str(uuid.uuid4())
+    jobs[job_id] = make_job(is_webcam=True)
+    start_job_threads(job_id, 0)
+    return {"job_id": job_id}
+
+@app.post("/stop/{job_id}")
+async def stop_job(job_id: str):
+    if job_id in jobs:
+        jobs[job_id]['running'] = False
+    return {"status": "stopped"}
+
+@app.post("/pause/{job_id}")
+async def pause_job(job_id: str):
+    if job_id not in jobs:
+        raise HTTPException(404, "Job not found")
+    jobs[job_id]['paused'] = not jobs[job_id]['paused']
+    return {"paused": jobs[job_id]['paused']}
+
 @app.get("/stream/{job_id}")
 async def stream_frames(job_id: str):
     if job_id not in jobs:
@@ -642,9 +583,9 @@ async def stream_frames(job_id: str):
                     yield 'data: {"done": true}\n\n'
                     break
                 empty_iters += 1
-                if empty_iters > 600:   # 30s timeout
+                if empty_iters > 600:
                     break
-                await asyncio.sleep(0.033)   # poll at ~30fps
+                await asyncio.sleep(0.033)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
